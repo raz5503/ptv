@@ -394,7 +394,7 @@
           return val;
         }
       }
-      return 3; // default
+      return 3;
     }
 
     function createVideoCard(url, index) {
@@ -441,11 +441,30 @@
       const delBtn = document.createElement('button');
       delBtn.className = 'delete-btn';
       delBtn.innerHTML = '<i class="fas fa-times-circle"></i>';
-      delBtn.addEventListener('click', (e) => {
+      delBtn.addEventListener('click', function(e) {
         e.stopPropagation();
-        videoUrls.splice(index, 1);
+        const cardElement = this.closest('.video-card');
+        const idx = parseInt(cardElement.dataset.index, 10);
+        
+        // Remove from array
+        videoUrls.splice(idx, 1);
         saveToStorage();
-        renderFullGrid();
+        
+        // Remove card from DOM
+        cardElement.remove();
+        
+        // Update indices of remaining cards
+        document.querySelectorAll('.video-card').forEach((card, newIndex) => {
+          card.dataset.index = newIndex;
+        });
+        
+        // Update counter
+        updateCounter();
+        
+        // Show empty state if no videos
+        if (videoUrls.length === 0) {
+          showEmptyState();
+        }
       });
 
       actionsDiv.appendChild(fsBtn);
@@ -457,21 +476,31 @@
       return card;
     }
 
+    function showEmptyState() {
+      grid.innerHTML = '';
+      const emptyDiv = document.createElement('div');
+      emptyDiv.className = 'empty-mosaic';
+      emptyDiv.innerHTML = `
+        <i class="fas fa-video"></i>
+        <p style="font-size:1.1rem; margin-top:0.5rem;">No videos added yet</p>
+        <p style="font-size:0.9rem; color:#4e6080;">Add a URL above to build your mosaic</p>
+      `;
+      grid.appendChild(emptyDiv);
+      counterSpan.textContent = '0';
+    }
+
+    function updateCounter() {
+      const visibleCards = grid.querySelectorAll('.video-card');
+      counterSpan.textContent = visibleCards.length;
+    }
+
     function renderFullGrid() {
       const cols = parseInt(columnSelect.value, 10);
       grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
       grid.innerHTML = '';
 
       if (videoUrls.length === 0) {
-        const emptyDiv = document.createElement('div');
-        emptyDiv.className = 'empty-mosaic';
-        emptyDiv.innerHTML = `
-          <i class="fas fa-video"></i>
-          <p style="font-size:1.1rem; margin-top:0.5rem;">No videos added yet</p>
-          <p style="font-size:0.9rem; color:#4e6080;">Add a URL above to build your mosaic</p>
-        `;
-        grid.appendChild(emptyDiv);
-        counterSpan.textContent = '0';
+        showEmptyState();
         return;
       }
 
@@ -487,7 +516,6 @@
       const cols = parseInt(columnSelect.value, 10);
       grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
       saveColumnToStorage(cols);
-      // Do NOT re-render videos - only change column layout
     }
 
     function addVideoWithoutRefresh() {
@@ -517,6 +545,7 @@
       videoUrls.push(rawUrl);
       saveToStorage();
 
+      // Remove empty state if exists
       const emptyDiv = grid.querySelector('.empty-mosaic');
       if (emptyDiv) {
         emptyDiv.remove();
@@ -529,7 +558,7 @@
       const newCard = createVideoCard(rawUrl, newIndex);
       grid.appendChild(newCard);
 
-      counterSpan.textContent = videoUrls.length;
+      updateCounter();
 
       urlInput.value = '';
       urlInput.focus();
@@ -540,14 +569,13 @@
       if (confirm('Remove all videos from mosaic?')) {
         videoUrls = [];
         saveToStorage();
-        renderFullGrid();
+        showEmptyState();
       }
     }
 
     function init() {
       loadFromStorage();
 
-      // Load saved column count
       const savedCols = loadColumnFromStorage();
       columnSelect.value = String(savedCols);
       grid.style.gridTemplateColumns = `repeat(${savedCols}, 1fr)`;
@@ -566,7 +594,6 @@
 
       clearAllBtn.addEventListener('click', clearAllVideos);
 
-      // Column change - only update grid columns, no video refresh
       columnSelect.addEventListener('change', function() {
         updateColumnOnly();
       });
