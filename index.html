@@ -231,18 +231,37 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 4px;
+      gap: 6px;
     }
-    .video-title span {
+    .video-title .url-text {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      max-width: 50%;
-      display: inline-block;
-    }
-    .video-title .url-text {
+      flex: 1;
       font-weight: 300;
       color: #8d9fc7;
+    }
+    .video-title .copy-btn {
+      background: transparent;
+      border: none;
+      color: #6c8cff;
+      font-size: 0.8rem;
+      cursor: pointer;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      transition: 0.2s;
+      flex-shrink: 0;
+    }
+    .video-title .copy-btn:hover {
+      background: #1a2a4a;
+      color: #8cacff;
+    }
+    .video-title .copy-btn.copied {
+      color: #4caf50;
+    }
+    .video-title .copy-btn.copied:hover {
+      background: #1a3a2a;
+      color: #66bb6a;
     }
 
     .filter-controls {
@@ -370,6 +389,13 @@
     .fullscreen-btn:hover {
       background: #2d3a52;
     }
+    .reload-btn {
+      color: #6c8cff;
+    }
+    .reload-btn:hover {
+      background: #1a2a4a;
+      color: #8cacff;
+    }
 
     .empty-mosaic {
       grid-column: 1 / -1;
@@ -384,6 +410,33 @@
       font-size: 3rem;
       margin-bottom: 1rem;
       opacity: 0.6;
+    }
+
+    /* Toast notification */
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #1a212b;
+      color: #afc0e3;
+      padding: 0.7rem 1.5rem;
+      border-radius: 40px;
+      font-size: 0.85rem;
+      border: 1px solid #2d3748;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.8);
+      opacity: 0;
+      transition: all 0.4s ease;
+      z-index: 999;
+      pointer-events: none;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    .toast i {
+      color: #4caf50;
+      margin-right: 8px;
     }
 
     @media (max-width: 900px) {
@@ -432,9 +485,11 @@
     <div class="column-controls">
       <label><i class="fas fa-columns"></i> Cols</label>
       <select id="columnSelect">
+        <option value="1">1</option>
         <option value="2">2</option>
         <option value="3" selected>3</option>
         <option value="4">4</option>
+        <option value="5">5</option>
         <option value="6">6</option>
       </select>
     </div>
@@ -445,6 +500,9 @@
   <div class="mosaic-grid" id="mosaicGrid"></div>
 
 </div>
+
+<!-- Toast Notification -->
+<div class="toast" id="toast"><i class="fas fa-check-circle"></i> <span id="toastMessage">Link copied!</span></div>
 
 <script>
   (function() {
@@ -457,10 +515,69 @@
     const clearAllBtn = document.getElementById('clearAllBtn');
     const columnSelect = document.getElementById('columnSelect');
     const counterSpan = document.getElementById('videoCounter');
+    const toast = document.getElementById('toast');
+    const toastMessage = document.getElementById('toastMessage');
 
     let videoUrls = [];
     let videoFilters = {};
+    let saveTimeout = null;
+    let toastTimeout = null;
 
+    // ----- TOAST FUNCTION -----
+    function showToast(message) {
+      toastMessage.textContent = message;
+      toast.classList.add('show');
+      if (toastTimeout) {
+        clearTimeout(toastTimeout);
+      }
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2000);
+    }
+
+    // ----- COPY FUNCTION -----
+    function copyToClipboard(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast('Link copied to clipboard!');
+        }).catch(() => {
+          // Fallback
+          fallbackCopy(text);
+        });
+      } else {
+        fallbackCopy(text);
+      }
+    }
+
+    function fallbackCopy(text) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        showToast('Link copied to clipboard!');
+      } catch (err) {
+        showToast('Failed to copy link');
+      }
+      document.body.removeChild(textarea);
+    }
+
+    // ----- DEBOUNCED SAVE FUNCTION -----
+    function debouncedSaveFilters() {
+      if (saveTimeout) {
+        clearTimeout(saveTimeout);
+      }
+      saveTimeout = setTimeout(() => {
+        localStorage.setItem(FILTERS_KEY, JSON.stringify(videoFilters));
+        saveTimeout = null;
+      }, 500);
+    }
+
+    // ----- SAVE FUNCTIONS -----
     function saveToStorage() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(videoUrls));
     }
@@ -505,7 +622,7 @@
       const stored = localStorage.getItem(COLUMN_KEY);
       if (stored) {
         const val = parseInt(stored, 10);
-        if (val === 2 || val === 3 || val === 4 || val === 6) {
+        if (val === 1 || val === 2 || val === 3 || val === 4 || val === 5 || val === 6) {
           return val;
         }
       }
@@ -582,6 +699,21 @@
       urlSpan.textContent = url;
       titleDiv.appendChild(urlSpan);
 
+      // Copy Button
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'copy-btn';
+      copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
+      copyBtn.setAttribute('aria-label', 'Copy video link');
+      copyBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        copyToClipboard(url);
+        this.classList.add('copied');
+        setTimeout(() => {
+          this.classList.remove('copied');
+        }, 2000);
+      });
+      titleDiv.appendChild(copyBtn);
+
       const wrapper = document.createElement('div');
       wrapper.className = 'iframe-wrapper';
       const iframe = document.createElement('iframe');
@@ -591,7 +723,6 @@
       iframe.setAttribute('allow', 'fullscreen');
       wrapper.appendChild(iframe);
 
-      // Filter Controls
       const filterControls = document.createElement('div');
       filterControls.className = 'filter-controls';
 
@@ -631,7 +762,7 @@
         if (filters.enabled) {
           applyFilterToIframe(iframe, filters);
         }
-        saveFiltersToStorage();
+        debouncedSaveFilters();
       });
       brightnessGroup.appendChild(bLabel);
       brightnessGroup.appendChild(bInput);
@@ -656,7 +787,7 @@
         if (filters.enabled) {
           applyFilterToIframe(iframe, filters);
         }
-        saveFiltersToStorage();
+        debouncedSaveFilters();
       });
       contrastGroup.appendChild(cLabel);
       contrastGroup.appendChild(cInput);
@@ -681,7 +812,7 @@
         if (filters.enabled) {
           applyFilterToIframe(iframe, filters);
         }
-        saveFiltersToStorage();
+        debouncedSaveFilters();
       });
       saturationGroup.appendChild(sLabel);
       saturationGroup.appendChild(sInput);
@@ -706,7 +837,7 @@
         if (filters.enabled) {
           applyFilterToIframe(iframe, filters);
         }
-        saveFiltersToStorage();
+        debouncedSaveFilters();
       });
       hueGroup.appendChild(hLabel);
       hueGroup.appendChild(hInput);
@@ -727,7 +858,6 @@
       filterControls.appendChild(hueGroup);
       filterControls.appendChild(resetBtn);
 
-      // Apply initial filter
       applyFilterToIframe(iframe, filters);
 
       const actionsDiv = document.createElement('div');
@@ -747,6 +877,22 @@
           } else if (iframeEl.msRequestFullscreen) {
             iframeEl.msRequestFullscreen();
           }
+        }
+      });
+
+      const reloadBtn = document.createElement('button');
+      reloadBtn.className = 'reload-btn';
+      reloadBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+      reloadBtn.setAttribute('aria-label', 'Reload video');
+      reloadBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const iframeEl = wrapper.querySelector('iframe');
+        if (iframeEl) {
+          const currentSrc = iframeEl.src;
+          iframeEl.src = 'about:blank';
+          setTimeout(() => {
+            iframeEl.src = currentSrc;
+          }, 100);
         }
       });
 
@@ -779,6 +925,7 @@
       });
 
       actionsDiv.appendChild(fsBtn);
+      actionsDiv.appendChild(reloadBtn);
       actionsDiv.appendChild(delBtn);
 
       card.appendChild(titleDiv);
