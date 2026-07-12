@@ -215,6 +215,7 @@
       height: 100%;
       border: none;
       background: #0a0c0f;
+      transition: filter 0.3s ease;
     }
 
     .video-title {
@@ -236,7 +237,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      max-width: 70%;
+      max-width: 50%;
       display: inline-block;
     }
     .video-title .url-text {
@@ -244,12 +245,101 @@
       color: #8d9fc7;
     }
 
+    .filter-controls {
+      background: #10161e;
+      padding: 0.5rem 0.8rem;
+      border-top: 1px solid #28303d;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 0.8rem;
+    }
+    .filter-controls .filter-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: #a5b6da;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+    .filter-controls .filter-checkbox input[type="checkbox"] {
+      accent-color: #6c8cff;
+      width: 14px;
+      height: 14px;
+      cursor: pointer;
+    }
+    .filter-controls .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem 0.6rem;
+      flex-wrap: wrap;
+    }
+    .filter-controls .filter-group label {
+      color: #7a8395;
+      font-size: 0.65rem;
+      font-weight: 500;
+      letter-spacing: 0.3px;
+    }
+    .filter-controls .filter-group input[type="range"] {
+      width: 60px;
+      height: 4px;
+      -webkit-appearance: none;
+      background: #2d3748;
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+    }
+    .filter-controls .filter-group input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #6c8cff;
+      cursor: pointer;
+    }
+    .filter-controls .filter-group input[type="range"]::-moz-range-thumb {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #6c8cff;
+      cursor: pointer;
+      border: none;
+    }
+    .filter-controls .filter-value {
+      color: #afc0e3;
+      font-size: 0.6rem;
+      min-width: 24px;
+      text-align: center;
+    }
+
+    .filter-controls .reset-btn {
+      background: #2f1e2a;
+      border: none;
+      color: #f0b3b3;
+      padding: 0.2rem 0.7rem;
+      border-radius: 40px;
+      font-size: 0.65rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: 1px solid #572e3a;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+      margin-left: auto;
+    }
+    .filter-controls .reset-btn:hover {
+      background: #4a2c38;
+      color: #ffcaca;
+      border-color: #a14b5e;
+    }
+
     .card-actions {
       display: flex;
       justify-content: flex-end;
       align-items: center;
       gap: 0.6rem;
-      padding: 0.4rem 0.8rem 0.5rem;
+      padding: 0.3rem 0.8rem 0.4rem;
       background: #10161e;
       border-top: 1px solid #28303d;
     }
@@ -257,11 +347,11 @@
       background: transparent;
       border: none;
       color: #a5b6da;
-      font-size: 1rem;
+      font-size: 0.9rem;
       cursor: pointer;
       transition: 0.2s;
-      padding: 0.2rem 0.4rem;
-      border-radius: 8px;
+      padding: 0.15rem 0.4rem;
+      border-radius: 6px;
     }
     .card-actions button:hover {
       color: white;
@@ -307,6 +397,9 @@
       .input-area input {
         min-width: 100px;
       }
+      .filter-controls .filter-group input[type="range"] {
+        width: 40px;
+      }
     }
     @media (max-width: 600px) {
       body { padding: 1rem; }
@@ -314,6 +407,8 @@
       .mosaic-grid { grid-template-columns: 1fr !important; }
       .top-bar { flex-direction: column; align-items: stretch; }
       .column-controls { justify-content: center; }
+      .filter-controls { flex-direction: column; align-items: stretch; }
+      .filter-controls .reset-btn { margin-left: 0; }
     }
   </style>
 </head>
@@ -355,6 +450,7 @@
   (function() {
     const STORAGE_KEY = 'mosaic_video_urls';
     const COLUMN_KEY = 'mosaic_column_count';
+    const FILTERS_KEY = 'mosaic_video_filters';
     const grid = document.getElementById('mosaicGrid');
     const urlInput = document.getElementById('urlInput');
     const addBtn = document.getElementById('addVideoBtn');
@@ -363,6 +459,7 @@
     const counterSpan = document.getElementById('videoCounter');
 
     let videoUrls = [];
+    let videoFilters = {};
 
     function saveToStorage() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(videoUrls));
@@ -382,6 +479,24 @@
       videoUrls = [];
     }
 
+    function saveFiltersToStorage() {
+      localStorage.setItem(FILTERS_KEY, JSON.stringify(videoFilters));
+    }
+
+    function loadFiltersFromStorage() {
+      const stored = localStorage.getItem(FILTERS_KEY);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (typeof parsed === 'object') {
+            videoFilters = parsed;
+            return;
+          }
+        } catch (e) {}
+      }
+      videoFilters = {};
+    }
+
     function saveColumnToStorage(cols) {
       localStorage.setItem(COLUMN_KEY, String(cols));
     }
@@ -395,6 +510,64 @@
         }
       }
       return 3;
+    }
+
+    function getFilterId(url, index) {
+      return `filter_${index}_${url.substring(0, 20)}`;
+    }
+
+    function getDefaultFilters() {
+      return {
+        enabled: false,
+        brightness: 100,
+        contrast: 100,
+        saturation: 100,
+        hue: 0
+      };
+    }
+
+    function getFilterForVideo(index, url) {
+      const id = getFilterId(url, index);
+      if (videoFilters[id]) {
+        return videoFilters[id];
+      }
+      const defaults = getDefaultFilters();
+      videoFilters[id] = { ...defaults };
+      return videoFilters[id];
+    }
+
+    function applyFilterToIframe(iframe, filters) {
+      if (!iframe) return;
+      if (filters.enabled) {
+        const b = filters.brightness / 100;
+        const c = filters.contrast / 100;
+        const s = filters.saturation / 100;
+        const h = filters.hue;
+        iframe.style.filter = `brightness(${b}) contrast(${c}) saturate(${s}) hue-rotate(${h}deg)`;
+      } else {
+        iframe.style.filter = 'none';
+      }
+    }
+
+    function resetFilters(filters, iframe, checkbox, bInput, cInput, sInput, hInput, bValue, cValue, sValue, hValue) {
+      filters.enabled = false;
+      filters.brightness = 100;
+      filters.contrast = 100;
+      filters.saturation = 100;
+      filters.hue = 0;
+      
+      checkbox.checked = false;
+      bInput.value = 100;
+      cInput.value = 100;
+      sInput.value = 100;
+      hInput.value = 0;
+      bValue.textContent = '100%';
+      cValue.textContent = '100%';
+      sValue.textContent = '100%';
+      hValue.textContent = '0°';
+      
+      applyFilterToIframe(iframe, filters);
+      saveFiltersToStorage();
     }
 
     function createVideoCard(url, index) {
@@ -417,6 +590,145 @@
       iframe.loading = 'lazy';
       iframe.setAttribute('allow', 'fullscreen');
       wrapper.appendChild(iframe);
+
+      // Filter Controls
+      const filterControls = document.createElement('div');
+      filterControls.className = 'filter-controls';
+
+      const filterId = getFilterId(url, index);
+      const filters = getFilterForVideo(index, url);
+
+      // Checkbox
+      const checkboxLabel = document.createElement('label');
+      checkboxLabel.className = 'filter-checkbox';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = filters.enabled || false;
+      checkbox.addEventListener('change', function() {
+        filters.enabled = this.checked;
+        applyFilterToIframe(iframe, filters);
+        saveFiltersToStorage();
+      });
+      checkboxLabel.appendChild(checkbox);
+      checkboxLabel.appendChild(document.createTextNode('Color'));
+
+      // Brightness
+      const brightnessGroup = document.createElement('div');
+      brightnessGroup.className = 'filter-group';
+      const bLabel = document.createElement('label');
+      bLabel.textContent = 'Bright';
+      const bInput = document.createElement('input');
+      bInput.type = 'range';
+      bInput.min = '0';
+      bInput.max = '200';
+      bInput.value = filters.brightness || 100;
+      const bValue = document.createElement('span');
+      bValue.className = 'filter-value';
+      bValue.textContent = bInput.value + '%';
+      bInput.addEventListener('input', function() {
+        filters.brightness = parseInt(this.value, 10);
+        bValue.textContent = this.value + '%';
+        if (filters.enabled) {
+          applyFilterToIframe(iframe, filters);
+        }
+        saveFiltersToStorage();
+      });
+      brightnessGroup.appendChild(bLabel);
+      brightnessGroup.appendChild(bInput);
+      brightnessGroup.appendChild(bValue);
+
+      // Contrast
+      const contrastGroup = document.createElement('div');
+      contrastGroup.className = 'filter-group';
+      const cLabel = document.createElement('label');
+      cLabel.textContent = 'Contrast';
+      const cInput = document.createElement('input');
+      cInput.type = 'range';
+      cInput.min = '0';
+      cInput.max = '200';
+      cInput.value = filters.contrast || 100;
+      const cValue = document.createElement('span');
+      cValue.className = 'filter-value';
+      cValue.textContent = cInput.value + '%';
+      cInput.addEventListener('input', function() {
+        filters.contrast = parseInt(this.value, 10);
+        cValue.textContent = this.value + '%';
+        if (filters.enabled) {
+          applyFilterToIframe(iframe, filters);
+        }
+        saveFiltersToStorage();
+      });
+      contrastGroup.appendChild(cLabel);
+      contrastGroup.appendChild(cInput);
+      contrastGroup.appendChild(cValue);
+
+      // Saturation
+      const saturationGroup = document.createElement('div');
+      saturationGroup.className = 'filter-group';
+      const sLabel = document.createElement('label');
+      sLabel.textContent = 'Saturate';
+      const sInput = document.createElement('input');
+      sInput.type = 'range';
+      sInput.min = '0';
+      sInput.max = '200';
+      sInput.value = filters.saturation || 100;
+      const sValue = document.createElement('span');
+      sValue.className = 'filter-value';
+      sValue.textContent = sInput.value + '%';
+      sInput.addEventListener('input', function() {
+        filters.saturation = parseInt(this.value, 10);
+        sValue.textContent = this.value + '%';
+        if (filters.enabled) {
+          applyFilterToIframe(iframe, filters);
+        }
+        saveFiltersToStorage();
+      });
+      saturationGroup.appendChild(sLabel);
+      saturationGroup.appendChild(sInput);
+      saturationGroup.appendChild(sValue);
+
+      // Hue
+      const hueGroup = document.createElement('div');
+      hueGroup.className = 'filter-group';
+      const hLabel = document.createElement('label');
+      hLabel.textContent = 'Hue';
+      const hInput = document.createElement('input');
+      hInput.type = 'range';
+      hInput.min = '0';
+      hInput.max = '360';
+      hInput.value = filters.hue || 0;
+      const hValue = document.createElement('span');
+      hValue.className = 'filter-value';
+      hValue.textContent = hInput.value + '°';
+      hInput.addEventListener('input', function() {
+        filters.hue = parseInt(this.value, 10);
+        hValue.textContent = this.value + '°';
+        if (filters.enabled) {
+          applyFilterToIframe(iframe, filters);
+        }
+        saveFiltersToStorage();
+      });
+      hueGroup.appendChild(hLabel);
+      hueGroup.appendChild(hInput);
+      hueGroup.appendChild(hValue);
+
+      // Reset Button
+      const resetBtn = document.createElement('button');
+      resetBtn.className = 'reset-btn';
+      resetBtn.innerHTML = '<i class="fas fa-undo-alt"></i> Reset';
+      resetBtn.addEventListener('click', function() {
+        resetFilters(filters, iframe, checkbox, bInput, cInput, sInput, hInput, bValue, cValue, sValue, hValue);
+      });
+
+      filterControls.appendChild(checkboxLabel);
+      filterControls.appendChild(brightnessGroup);
+      filterControls.appendChild(contrastGroup);
+      filterControls.appendChild(saturationGroup);
+      filterControls.appendChild(hueGroup);
+      filterControls.appendChild(resetBtn);
+
+      // Apply initial filter
+      applyFilterToIframe(iframe, filters);
 
       const actionsDiv = document.createElement('div');
       actionsDiv.className = 'card-actions';
@@ -446,22 +758,21 @@
         const cardElement = this.closest('.video-card');
         const idx = parseInt(cardElement.dataset.index, 10);
         
-        // Remove from array
+        const filterIdToRemove = getFilterId(url, idx);
+        delete videoFilters[filterIdToRemove];
+        saveFiltersToStorage();
+        
         videoUrls.splice(idx, 1);
         saveToStorage();
         
-        // Remove card from DOM
         cardElement.remove();
         
-        // Update indices of remaining cards
         document.querySelectorAll('.video-card').forEach((card, newIndex) => {
           card.dataset.index = newIndex;
         });
         
-        // Update counter
         updateCounter();
         
-        // Show empty state if no videos
         if (videoUrls.length === 0) {
           showEmptyState();
         }
@@ -472,6 +783,7 @@
 
       card.appendChild(titleDiv);
       card.appendChild(wrapper);
+      card.appendChild(filterControls);
       card.appendChild(actionsDiv);
       return card;
     }
@@ -545,7 +857,6 @@
       videoUrls.push(rawUrl);
       saveToStorage();
 
-      // Remove empty state if exists
       const emptyDiv = grid.querySelector('.empty-mosaic');
       if (emptyDiv) {
         emptyDiv.remove();
@@ -568,13 +879,16 @@
       if (videoUrls.length === 0) return;
       if (confirm('Remove all videos from mosaic?')) {
         videoUrls = [];
+        videoFilters = {};
         saveToStorage();
+        saveFiltersToStorage();
         showEmptyState();
       }
     }
 
     function init() {
       loadFromStorage();
+      loadFiltersFromStorage();
 
       const savedCols = loadColumnFromStorage();
       columnSelect.value = String(savedCols);
